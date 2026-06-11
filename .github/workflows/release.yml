@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  TARGET_RELEASE_REPO: ${{ vars.TARGET_RELEASE_REPO }}
+
 concurrency:
   group: public-build-${{ github.ref }}
   cancel-in-progress: true
@@ -32,16 +35,17 @@ jobs:
 
       - name: Create draft release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRIVATE_RELEASE_TOKEN }}
         shell: bash
         run: |
+          repo="${TARGET_RELEASE_REPO:-codingmachineedge/DoorDash-Hui}"
           tag="${{ steps.ver.outputs.tag }}"
           title="HuiDash $tag"
           body=$'Automated public builder release.\nBuild material is prepared at runtime from repository data and GitHub Actions Secrets.'
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=true --title "$title" --notes "$body"
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$repo" --draft=true --title "$title" --notes "$body"
           else
-            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" --title "$title" --notes "$body"
+            gh release create "$tag" --repo "$repo" --draft --title "$title" --notes "$body"
           fi
 
   windows-assets:
@@ -125,9 +129,10 @@ jobs:
       - name: Upload Windows and APK assets
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRIVATE_RELEASE_TOKEN }}
         shell: pwsh
         run: |
+          $repo = if ([string]::IsNullOrWhiteSpace($env:TARGET_RELEASE_REPO)) { "codingmachineedge/DoorDash-Hui" } else { $env:TARGET_RELEASE_REPO }
           New-Item -ItemType Directory -Force -Path release-assets | Out-Null
           if (Test-Path source/HuiDash-Setup.exe) {
             Copy-Item source/HuiDash-Setup.exe release-assets/
@@ -146,7 +151,7 @@ jobs:
             Write-Warning "No Windows/APK release assets found."
             exit 0
           }
-          gh release upload "${{ needs.prepare-release.outputs.tag }}" @($files.FullName) --repo "$env:GITHUB_REPOSITORY" --clobber
+          gh release upload "${{ needs.prepare-release.outputs.tag }}" @($files.FullName) --repo "$repo" --clobber
 
   docker-assets:
     runs-on: ubuntu-latest
@@ -167,10 +172,11 @@ jobs:
       - name: Build and upload Docker image archives
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRIVATE_RELEASE_TOKEN }}
         shell: bash
         run: |
           set -u
+          repo="${TARGET_RELEASE_REPO:-codingmachineedge/DoorDash-Hui}"
           cd source
           v="${{ needs.prepare-release.outputs.version }}"
           mkdir -p ../release-assets
@@ -187,7 +193,7 @@ jobs:
             echo "No Docker release assets found."
             exit 0
           fi
-          gh release upload "${{ needs.prepare-release.outputs.tag }}" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "${{ needs.prepare-release.outputs.tag }}" "${files[@]}" --repo "$repo" --clobber
 
   publish-release:
     runs-on: ubuntu-latest
@@ -196,6 +202,8 @@ jobs:
     steps:
       - name: Publish draft release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRIVATE_RELEASE_TOKEN }}
         shell: bash
-        run: gh release edit "${{ needs.prepare-release.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        run: |
+          repo="${TARGET_RELEASE_REPO:-codingmachineedge/DoorDash-Hui}"
+          gh release edit "${{ needs.prepare-release.outputs.tag }}" --repo "$repo" --draft=false --latest
