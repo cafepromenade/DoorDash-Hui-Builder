@@ -207,3 +207,15 @@ jobs:
         run: |
           repo="${TARGET_RELEASE_REPO:-codingmachineedge/DoorDash-Hui}"
           gh release edit "${{ needs.prepare-release.outputs.tag }}" --repo "$repo" --draft=false --latest
+
+  lock-builder:
+    runs-on: ubuntu-latest
+    needs: [prepare-release, windows-assets, docker-assets, publish-release]
+    if: always()
+
+    steps:
+      - name: Lock builder
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_RELEASE_TOKEN }}
+        shell: bash
+        run: gh repo edit "$GITHUB_REPOSITORY" --visibility private --accept-visibility-change-consequences
